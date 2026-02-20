@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student–Faculty Meeting Portal</title>
+<style>
+:root{
+  --primary:#2f4f6f;
+  --accent:#4f86c6;
+  --bg:#f3f7fc;
+  --white:#fff;
+  --muted:#6b7c93;
+  --success:#2d9d78;
+  --danger:#d64545;
+  --pending:#b08900;
+}
+*{box-sizing:border-box;margin:0;padding:0;font-family:"Segoe UI",system-ui,sans-serif}
+body{background:var(--bg);color:#243b53}
+.hidden{display:none!important}
+
+/* login */
+.center{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
+.card{background:var(--white);padding:2rem;border-radius:18px;box-shadow:0 12px 30px rgba(0,0,0,.08);width:100%;max-width:420px}
+h2{color:var(--primary);margin-bottom:1rem}
+.field{margin-bottom:.8rem}
+label{font-size:.9rem;font-weight:600;margin-bottom:.3rem;display:block}
+input,select,textarea{width:100%;padding:.6rem;border-radius:10px;border:1px solid #cbd5e1}
+.btn{background:var(--accent);color:#fff;border:none;padding:.6rem;border-radius:10px;cursor:pointer;font-weight:600;width:100%}
+.btn.small{width:auto;padding:.3rem .6rem;font-size:.8rem}
+.btn.success{background:var(--success)}
+.btn.danger{background:var(--danger)}
+
+/* layout */
+.app{display:flex;min-height:100vh}
+.sidebar{width:230px;background:var(--primary);color:#fff;padding:1rem;display:flex;flex-direction:column;gap:.6rem}
+.side-btn{background:rgba(255,255,255,.1);border:none;color:#fff;padding:.5rem;border-radius:8px;text-align:left;cursor:pointer}
+.main{flex:1;padding:1.2rem}
+.panel{background:var(--white);padding:1rem;border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.06);margin-bottom:1rem}
+table{width:100%;border-collapse:collapse;font-size:.88rem}
+th,td{padding:.5rem;border-bottom:1px solid #e5eaf0;text-align:left}
+th{color:var(--muted)}
+.status.pending{color:var(--pending);font-weight:600}
+.status.accepted{color:var(--success);font-weight:600}
+.status.rejected{color:var(--danger);font-weight:600}
+.badge{background:var(--danger);color:#fff;border-radius:999px;padding:2px 7px;font-size:.7rem;margin-left:6px}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginView" class="center">
+  <div class="card">
+    <h2>Meeting Portal</h2>
+    <div class="field">
+      <label>Role</label>
+      <select id="roleSelect">
+        <option value="Student">Student</option>
+        <option value="Faculty">Faculty</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Name</label>
+      <input id="loginName" placeholder="Enter name">
+    </div>
+    <button class="btn" onclick="login()">Login</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appView" class="app hidden">
+  <div class="sidebar">
+    <strong id="roleTitle">Dashboard</strong>
+    <button id="navNew" class="side-btn" onclick="showSection('studentNew')">New Request</button>
+    <button id="navMy" class="side-btn" onclick="showSection('studentMy')">My Requests <span id="notifyBadge" class="badge hidden">!</span></button>
+    <button id="navPlanner" class="side-btn" onclick="showSection('studentPlanner')">Planner</button>
+
+    <button id="navFacultyPending" class="side-btn hidden" onclick="showSection('facultyPending')">Pending Requests</button>
+    <button id="navFacultyPlanner" class="side-btn hidden" onclick="showSection('facultyPlanner')">Faculty Planner</button>
+
+    <button class="side-btn" onclick="logout()">Logout</button>
+  </div>
+
+  <div class="main">
+
+    <!-- STUDENT NEW -->
+    <div id="studentNew" class="panel">
+      <h2>New Request</h2>
+      <div class="field"><label>Faculty</label>
+        <select id="facultyName">
+          <option>Dr. Kumar</option>
+          <option>Prof. Meena</option>
+          <option>Dr. Reddy</option>
+        </select></div>
+      <div class="field"><label>Date/Time</label>
+        <input type="datetime-local" id="timeSlot"></div>
+      <div class="field"><label>Reason</label>
+        <textarea id="reason"></textarea></div>
+      <button class="btn" onclick="submitRequest()">Submit</button>
+    </div>
+
+    <!-- STUDENT MY -->
+    <div id="studentMy" class="panel hidden">
+      <h2>My Requests</h2>
+      <table>
+        <thead><tr><th>Faculty</th><th>Time</th><th>Reason</th><th>Status</th></tr></thead>
+        <tbody id="myRequestsBody"></tbody>
+      </table>
+    </div>
+
+    <!-- STUDENT PLANNER -->
+    <div id="studentPlanner" class="panel hidden">
+      <h2>My Planner</h2>
+      <ul id="studentPlannerList"></ul>
+    </div>
+
+    <!-- FACULTY PENDING -->
+    <div id="facultyPending" class="panel hidden">
+      <h2>Pending Requests</h2>
+      <table>
+        <thead><tr><th>Student</th><th>Time</th><th>Reason</th><th>Action</th></tr></thead>
+        <tbody id="incomingBody"></tbody>
+      </table>
+    </div>
+
+    <!-- FACULTY PLANNER -->
+    <div id="facultyPlanner" class="panel hidden">
+      <h2>Faculty Planner</h2>
+      <ul id="facultyPlannerList"></ul>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let currentUser={role:null,name:null};
+let requests=JSON.parse(localStorage.getItem('requests')||'[]');
+
+const FLOW_URL = "https://default7359f89671e24daeb8a315cdf97f2f.10.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/9161272c7c2e4cbe88737d7bf23c2340/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=nVX8JRAqAaYLMou-W4c9FWAa62xuaiUEd_5RIpfsN8M";
+
+const classTimes=[
+  {faculty:'Dr. Kumar',time:'Everyday 10:00-11:00'},
+  {faculty:'Prof. Meena',time:'Everyday 11:00-12:00'},
+  {faculty:'Dr. Reddy',time:'Everyday 2:00-3:00'}
+];
+
+function save(){localStorage.setItem('requests',JSON.stringify(requests));}
+
+/* 🔹 NEW FUNCTION: Save Login To SharePoint */
+async function saveLoginToSharePoint(name, role){
+  try{
+    await fetch(FLOW_URL,{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json"
+      },
+      body:JSON.stringify({
+        UserName:name,
+        Role:role
+      })
+    });
+    console.log("Login saved to SharePoint");
+  }catch(error){
+    console.error("Error saving login:",error);
+  }
+}
+
+async function login(){
+  const role=document.getElementById('roleSelect').value;
+  const name=document.getElementById('loginName').value.trim();
+  if(!name) return alert('Enter name');
+
+  currentUser={role,name};
+
+  /* 🔹 CALL POWER AUTOMATE FLOW */
+  await saveLoginToSharePoint(name, role);
+
+  document.getElementById('loginView').classList.add('hidden');
+  document.getElementById('appView').classList.remove('hidden');
+  document.getElementById('roleTitle').innerText=role;
+
+  if(role==='Faculty'){
+    navNew.classList.add('hidden');
+    navMy.classList.add('hidden');
+    navPlanner.classList.add('hidden');
+    navFacultyPending.classList.remove('hidden');
+    navFacultyPlanner.classList.remove('hidden');
+    showSection('facultyPending');
+  }else{
+    navNew.classList.remove('hidden');
+    navMy.classList.remove('hidden');
+    navPlanner.classList.remove('hidden');
+    navFacultyPending.classList.add('hidden');
+    navFacultyPlanner.classList.add('hidden');
+    showSection('studentNew');
+  }
+  renderAll();
+}
+
+function logout(){location.reload();}
+
+function showSection(id){
+  ['studentNew','studentMy','studentPlanner','facultyPending','facultyPlanner']
+  .forEach(s=>document.getElementById(s).classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+}
+
+function submitRequest(){
+  const faculty=facultyName.value;
+  const time=timeSlot.value;
+  const reason=document.getElementById('reason').value.trim();
+  if(!time||!reason) return alert('Fill all fields');
+
+  requests.push({
+    id:Date.now(),
+    student:currentUser.name,
+    faculty,
+    time,
+    reason,
+    status:'Pending',
+    notified:false
+  });
+  save();
+  renderAll();
+  showSection('studentMy');
+}
+
+function updateStatus(id,status){
+  const req=requests.find(r=>r.id===id);
+  if(!req) return;
+  req.status=status;
+  req.notified=true;
+  save();
+  renderAll();
+}
+
+function renderAll(){
+  renderStudentTable();
+  renderFacultyTable();
+  renderPlanner();
+  renderNotifications();
+}
+
+function renderStudentTable(){
+  const body=document.getElementById('myRequestsBody');
+  body.innerHTML='';
+  requests.filter(r=>r.student===currentUser.name).forEach(r=>{
+    body.innerHTML+=`<tr>
+      <td>${r.faculty}</td>
+      <td>${formatTime(r.time)}</td>
+      <td>${r.reason}</td>
+      <td class="status ${r.status.toLowerCase()}">${r.status}</td>
+    </tr>`;
+  });
+}
+
+function renderFacultyTable(){
+  const body=document.getElementById('incomingBody');
+  body.innerHTML='';
+  requests
+    .filter(r=>r.faculty===currentUser.name && r.status==='Pending')
+    .forEach(r=>{
+      body.innerHTML+=`<tr>
+        <td>${r.student}</td>
+        <td>${formatTime(r.time)}</td>
+        <td>${r.reason}</td>
+        <td>
+          <button class="btn small success" onclick="updateStatus(${r.id},'Accepted')">Accept</button>
+          <button class="btn small danger" onclick="updateStatus(${r.id},'Rejected')">Reject</button>
+        </td>
+      </tr>`;
+    });
+}
+
+function renderPlanner(){
+  const sList=document.getElementById('studentPlannerList');
+  const fList=document.getElementById('facultyPlannerList');
+  sList.innerHTML='';
+  fList.innerHTML='';
+
+  requests
+    .filter(r=>r.student===currentUser.name && r.status==='Accepted')
+    .forEach(r=>{
+      sList.innerHTML+=`<li>${formatTime(r.time)} with ${r.faculty}</li>`;
+    });
+
+  classTimes
+    .filter(c=>c.faculty===currentUser.name)
+    .forEach(c=>{
+      fList.innerHTML+=`<li><strong>Class:</strong> ${c.time}</li>`;
+    });
+
+  requests
+    .filter(r=>r.faculty===currentUser.name && r.status==='Accepted')
+    .forEach(r=>{
+      fList.innerHTML+=`<li><strong>Meeting:</strong> ${formatTime(r.time)} with ${r.student}</li>`;
+    });
+}
+
+function renderNotifications(){
+  if(currentUser.role!=='Student') return;
+  const changed=requests.some(r=>r.student===currentUser.name && r.notified);
+  document.getElementById('notifyBadge').classList.toggle('hidden',!changed);
+}
+
+function formatTime(val){ if(!val) return ''; return new Date(val).toLocaleString(); }
+</script></body>
+</html>
