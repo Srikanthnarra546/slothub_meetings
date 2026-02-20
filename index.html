@@ -136,7 +136,11 @@ th{color:var(--muted)}
 let currentUser={role:null,name:null};
 let requests=JSON.parse(localStorage.getItem('requests')||'[]');
 
+/* LOGIN FLOW (Already Working) */
 const FLOW_URL = "https://default7359f89671e24daeb8a315cdf97f2f.10.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/9161272c7c2e4cbe88737d7bf23c2340/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=nVX8JRAqAaYLMou-W4c9FWAa62xuaiUEd_5RIpfsN8M";
+
+/* 🔥 NEW MEETING REQUEST FLOW */
+const REQUEST_FLOW_URL = "https://default7359f89671e24daeb8a315cdf97f2f.10.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/edfb086c046e488cb65c20368f829b14/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=C0SVbPquSF56H3KPwjCLy3wqxsav25c4EraziADNC-s";
 
 const classTimes=[
   {faculty:'Dr. Kumar',time:'Everyday 10:00-11:00'},
@@ -146,22 +150,19 @@ const classTimes=[
 
 function save(){localStorage.setItem('requests',JSON.stringify(requests));}
 
-/* 🔹 NEW FUNCTION: Save Login To SharePoint */
+/* LOGIN SAVE */
 async function saveLoginToSharePoint(name, role){
   try{
     await fetch(FLOW_URL,{
       method:"POST",
-      headers:{
-        "Content-Type":"application/json"
-      },
+      headers:{ "Content-Type":"application/json" },
       body:JSON.stringify({
         UserName:name,
         Role:role
       })
     });
-    console.log("Login saved to SharePoint");
   }catch(error){
-    console.error("Error saving login:",error);
+    console.error("Login error:",error);
   }
 }
 
@@ -171,8 +172,6 @@ async function login(){
   if(!name) return alert('Enter name');
 
   currentUser={role,name};
-
-  /* 🔹 CALL POWER AUTOMATE FLOW */
   await saveLoginToSharePoint(name, role);
 
   document.getElementById('loginView').classList.add('hidden');
@@ -205,12 +204,32 @@ function showSection(id){
   document.getElementById(id).classList.remove('hidden');
 }
 
-function submitRequest(){
+/* 🔥 UPDATED SUBMIT REQUEST */
+async function submitRequest(){
   const faculty=facultyName.value;
   const time=timeSlot.value;
   const reason=document.getElementById('reason').value.trim();
+
   if(!time||!reason) return alert('Fill all fields');
 
+  /* SEND TO SHAREPOINT */
+  try{
+    await fetch(REQUEST_FLOW_URL,{
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({
+        StudentName: currentUser.name,
+        Faculty: faculty,
+        MeetingTime: time,
+        Reason: reason
+      })
+    });
+    console.log("Request saved to SharePoint");
+  }catch(error){
+    console.error("Request error:",error);
+  }
+
+  /* KEEP LOCAL COPY FOR UI */
   requests.push({
     id:Date.now(),
     student:currentUser.name,
@@ -220,6 +239,7 @@ function submitRequest(){
     status:'Pending',
     notified:false
   });
+
   save();
   renderAll();
   showSection('studentMy');
