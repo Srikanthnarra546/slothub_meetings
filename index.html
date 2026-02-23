@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student–Faculty Meeting Portal</title>
+
+<style>
+:root{
+  --primary:#2f4f6f;
+  --accent:#4f86c6;
+  --bg:#f3f7fc;
+  --white:#fff;
+  --muted:#6b7c93;
+  --success:#2d9d78;
+  --danger:#d64545;
+  --pending:#b08900;
+}
+*{box-sizing:border-box;margin:0;padding:0;font-family:"Segoe UI",system-ui,sans-serif}
+body{background:var(--bg);color:#243b53}
+.hidden{display:none!important}
+.center{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
+.card{background:var(--white);padding:2rem;border-radius:18px;box-shadow:0 12px 30px rgba(0,0,0,.08);width:100%;max-width:420px}
+h2{color:var(--primary);margin-bottom:1rem}
+.field{margin-bottom:.8rem}
+label{font-size:.9rem;font-weight:600;margin-bottom:.3rem;display:block}
+input,select,textarea{width:100%;padding:.6rem;border-radius:10px;border:1px solid #cbd5e1}
+.btn{background:var(--accent);color:#fff;border:none;padding:.6rem;border-radius:10px;cursor:pointer;font-weight:600;width:100%}
+.btn.small{width:auto;padding:.3rem .6rem;font-size:.8rem}
+.btn.success{background:var(--success)}
+.btn.danger{background:var(--danger)}
+.app{display:flex;min-height:100vh}
+.sidebar{width:230px;background:var(--primary);color:#fff;padding:1rem;display:flex;flex-direction:column;gap:.6rem}
+.side-btn{background:rgba(255,255,255,.1);border:none;color:#fff;padding:.5rem;border-radius:8px;text-align:left;cursor:pointer}
+.main{flex:1;padding:1.2rem}
+.panel{background:var(--white);padding:1rem;border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.06);margin-bottom:1rem}
+table{width:100%;border-collapse:collapse;font-size:.88rem}
+th,td{padding:.5rem;border-bottom:1px solid #e5eaf0;text-align:left}
+.status.pending{color:var(--pending);font-weight:600}
+.status.accepted{color:var(--success);font-weight:600}
+.status.rejected{color:var(--danger);font-weight:600}
+</style>
+</head>
+
+<body>
+
+<!-- LOGIN -->
+<div id="loginView" class="center">
+  <div class="card">
+    <h2>Meeting Portal Login</h2>
+    <div class="field">
+      <label>Role</label>
+      <select id="roleSelect">
+        <option value="Student">Student</option>
+        <option value="Faculty">Faculty</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Username</label>
+      <input id="loginName" placeholder="Enter username">
+    </div>
+    <button class="btn" onclick="login()">Login</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appView" class="app hidden">
+  <div class="sidebar">
+    <strong id="roleTitle">Dashboard</strong>
+    <button id="navNew" class="side-btn" onclick="showSection('studentNew')">New Request</button>
+    <button id="navMy" class="side-btn" onclick="showSection('studentMy')">My Requests</button>
+    <button id="navFacultyPending" class="side-btn hidden" onclick="showSection('facultyPending')">Pending Requests</button>
+    <button class="side-btn" onclick="logout()">Logout</button>
+  </div>
+
+  <div class="main">
+
+    <div id="studentNew" class="panel">
+      <h2>New Request</h2>
+      <div class="field">
+        <label>Faculty</label>
+        <select id="facultyName">
+          <option>Dr. Kumar</option>
+          <option>Prof. Meena</option>
+          <option>Dr. Reddy</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Date/Time</label>
+        <input type="datetime-local" id="timeSlot">
+      </div>
+      <div class="field">
+        <label>Reason</label>
+        <textarea id="reason"></textarea>
+      </div>
+      <button class="btn" onclick="submitRequest()">Submit</button>
+    </div>
+
+    <div id="studentMy" class="panel hidden">
+      <h2>My Requests</h2>
+      <table>
+        <thead>
+          <tr><th>Faculty</th><th>Time</th><th>Reason</th><th>Status</th></tr>
+        </thead>
+        <tbody id="myRequestsBody"></tbody>
+      </table>
+    </div>
+
+    <div id="facultyPending" class="panel hidden">
+      <h2>Pending Requests</h2>
+      <table>
+        <thead>
+          <tr><th>Student</th><th>Time</th><th>Reason</th><th>Action</th></tr>
+        </thead>
+        <tbody id="incomingBody"></tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<script>
+
+/* 🔐 FLOW URLS */
+const AUTH_FLOW_URL = "https://default7359f89671e24daeb8a315cdf97f2f.10.environment.api.powerplatform.com/powerautomate/automations/direct/workflows/22a954f9bc70456fb29741e699038d8d/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=xkS88560NayCdANRuhuDSYjyvQVUB24WEyNMoRk8A4E";
+
+const LOGIN_FLOW_URL = "https://default7359f89671e24daeb8a315cdf97f2f.10.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/9161272c7c2e4cbe88737d7bf23c2340/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=nVX8JRAqAaYLMou-W4c9FWAa62xuaiUEd_5RIpfsN8M";
+const REQUEST_FLOW_URL = "https://default7359f89671e24daeb8a315cdf97f2f.10.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/edfb086c046e488cb65c20368f829b14/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=C0SVbPquSF56H3KPwjCLy3wqxsav25c4EraziADNC-s";
+
+let currentUser={role:null,name:null};
+let requests=[];
+
+/* LOGIN FUNCTION */
+async function login(){
+  const role=document.getElementById('roleSelect').value;
+  const name=document.getElementById('loginName').value.trim();
+  if(!name){ alert("Enter username"); return; }
+
+  try{
+
+    /* 1️⃣ AUTH CHECK */
+    const authResponse=await fetch(AUTH_FLOW_URL,{
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({ UserName:name, Role:role })
+    });
+
+    const authResult=await authResponse.json();
+
+    if(authResponse.status===200 && authResult.status==="Authorized"){
+
+      /* 2️⃣ SAVE LOGIN RECORD */
+      await fetch(LOGIN_FLOW_URL,{
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({ UserName:name, Role:role, LoginTime:new Date().toISOString() })
+      });
+
+      /* 3️⃣ OPEN APP */
+      currentUser={role,name};
+      document.getElementById('loginView').classList.add('hidden');
+      document.getElementById('appView').classList.remove('hidden');
+      document.getElementById('roleTitle').innerText=role;
+
+      if(role==="Faculty"){
+        navNew.classList.add('hidden');
+        navMy.classList.add('hidden');
+        navFacultyPending.classList.remove('hidden');
+        showSection('facultyPending');
+      }else{
+        navFacultyPending.classList.add('hidden');
+        navNew.classList.remove('hidden');
+        navMy.classList.remove('hidden');
+        showSection('studentNew');
+      }
+
+    }else{
+      alert("Unauthorized User ❌");
+    }
+
+  }catch(error){
+    console.error(error);
+    alert("Server Error");
+  }
+}
+
+function logout(){ location.reload(); }
+
+function showSection(id){
+  ['studentNew','studentMy','facultyPending']
+  .forEach(s=>document.getElementById(s).classList.add('hidden'));
+  document.getElementById(id).classList.remove('hidden');
+}
+
+/* SUBMIT REQUEST */
+async function submitRequest(){
+  const faculty=facultyName.value;
+  const time=timeSlot.value;
+  const reason=document.getElementById('reason').value.trim();
+  if(!time||!reason) return alert("Fill all fields");
+
+  try{
+    await fetch(REQUEST_FLOW_URL,{
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({
+        StudentName:currentUser.name,
+        Faculty:faculty,
+        MeetingTime:time,
+        Reason:reason,
+        Status:"Pending"
+      })
+    });
+  }catch(error){
+    console.error(error);
+  }
+
+  requests.push({student:currentUser.name,faculty,time,reason,status:"Pending"});
+  renderStudentTable();
+  showSection('studentMy');
+}
+
+function renderStudentTable(){
+  const body=document.getElementById('myRequestsBody');
+  body.innerHTML='';
+  requests.filter(r=>r.student===currentUser.name)
+  .forEach(r=>{
+    body.innerHTML+=`<tr>
+      <td>${r.faculty}</td>
+      <td>${new Date(r.time).toLocaleString()}</td>
+      <td>${r.reason}</td>
+      <td class="status ${r.status.toLowerCase()}">${r.status}</td>
+    </tr>`;
+  });
+}
+
+</script>
+</body>
+</html>
